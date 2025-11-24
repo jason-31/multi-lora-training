@@ -1,0 +1,23 @@
+# Python caches / bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.cache/
+
+# Common virtualenvs (optional)
+venv/
+.venv/
+env/
+ENV/
+
+# macOS files
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100/
+.Trashes/
+.fseventsd/
+.apdisk
