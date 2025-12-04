@@ -1,11 +1,12 @@
 import math
-from softmax import softmax
+from .softmax import softmax
 import torch
 from einops import einsum, rearrange, parse_shape
 import ipdb
 from torch.nn.init import trunc_normal_
-from linear import Linear
-from rope import RotaryPositionalEmbedding
+from .linear import Linear
+from .rope import RotaryPositionalEmbedding
+from .linear_multi_lora import MultiLoraLinear
 
 def scaled_dot_product_attention(
     query: torch.Tensor,
@@ -58,17 +59,17 @@ class MultiHeadSelfAttention(torch.nn.Module):
         self.num_heads = num_heads
         self.d_kv = d_model // num_heads
         
-        self.to_q = Linear(d_model, d_model)
-        self.to_k = Linear(d_model, d_model)
-        self.to_v = Linear(d_model, d_model)
-        self.to_out = Linear(d_model, d_model)
+        self.to_q = MultiLoraLinear(d_model, d_model)
+        self.to_k = MultiLoraLinear(d_model, d_model)
+        self.to_v = MultiLoraLinear(d_model, d_model)
+        self.to_out = MultiLoraLinear(d_model, d_model)
         
         self.rope = RotaryPositionalEmbedding(theta, self.d_kv, max_seq_len, device=None) if theta and max_seq_len else None
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        Q = self.to_q(x)
-        K = self.to_k(x)
-        V = self.to_v(x)
+    def forward(self, x: torch.Tensor, lora_start_indices) -> torch.Tensor:
+        Q = self.to_q(x, lora_start_indices)
+        K = self.to_k(x, lora_start_indices)
+        V = self.to_v(x, lora_start_indices)
         
         Q = rearrange(Q, '... seq_len (heads d_k) -> ... heads seq_len d_k', heads=self.num_heads)
         K = rearrange(K, '... seq_len (heads d_k) -> ... heads seq_len d_k', heads=self.num_heads)
@@ -89,6 +90,6 @@ class MultiHeadSelfAttention(torch.nn.Module):
 
         out = scaled_dot_product_attention(Q, K, V, mask)
         out = rearrange(out, '... heads seq_len d_v -> ... seq_len (heads d_v)')
-        out = self.to_out(out)
+        out = self.to_out(out, lora_start_indices)
         
         return out

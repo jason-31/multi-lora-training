@@ -1,13 +1,13 @@
 import math
-from softmax import softmax
+from .softmax import softmax
 from einops import einsum, rearrange, parse_shape
 import ipdb
 import torch
 from torch.nn.init import trunc_normal_
-from attention import MultiHeadSelfAttention
-from rms import RMSNorm
-from linear import Linear
-from swiglu import SwiGLU
+from .attention import MultiHeadSelfAttention
+from .rms import RMSNorm
+from .linear import Linear
+from .swiglu import SwiGLU
 
 class TransformerBlock(torch.nn.Module):
 
@@ -29,17 +29,16 @@ class TransformerBlock(torch.nn.Module):
         super().__init__()
         self.norm_1 = RMSNorm(d_model)
         self.norm_2 = RMSNorm(d_model)
-        self.ffn = SwiGLU(d_model, d_ff)
         self.attention = MultiHeadSelfAttention(d_model, num_heads, max_seq_len, theta)
+        self.ffn = SwiGLU(d_model, d_ff)
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # ipdb.set_trace()
+    def forward(self, x: torch.Tensor, lora_start_indices) -> torch.Tensor:
         x_norm_1 = self.norm_1(x)
-        attn_output = self.attention(x_norm_1)
+        attn_output = self.attention(x_norm_1, lora_start_indices)
         x = x + attn_output
         
         x_norm_2 = self.norm_2(x)
-        ffn_output = self.ffn(x_norm_2)
+        ffn_output = self.ffn(x_norm_2, lora_start_indices)
         out = x + ffn_output
         
         return out
