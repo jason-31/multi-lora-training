@@ -25,12 +25,17 @@ model = Transformer(
     theta=theta
 )
 
+# Move the model to CUDA device if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+print(f"Using device: {device}")
+
 print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
 # Create fake input and target
 print("\nCreating fake input and target...")
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
-target_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
 # Test forward pass without LoRA
 print("\nRunning forward passes without LoRA...")

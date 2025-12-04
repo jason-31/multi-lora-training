@@ -27,6 +27,11 @@ model = Transformer(
     theta=theta
 )
 
+# Move the model to CUDA device if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+print(f"Using device: {device}")
+
 print(f"Model parameters before LoRA: {sum(p.numel() for p in model.parameters()):,}")
 
 # Add two LoRA adapters
@@ -37,24 +42,24 @@ print("\nAdding LoRA adapter 2...")
 model.add_lora(rank=lora_rank, lora_alpha=lora_alpha)
 
 print(f"\nModel parameters after LoRA: {sum(p.numel() for p in model.parameters()):,}")
-print(f"Number of LoRA modules: {len(model.lora_modules) -1}")
+print(f"Number of LoRA adapters: {len(model.lora_modules) - 1}")
 
-# Create fake input with mixed LoRA indices
-# Batch of 8: 2 base model, 3 LoRA 1, 3 LoRA 2
-print("\nCreating fake input with mixed LoRA indices...")
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
-lora_indices = [0, 0, 1, 1, 1, 2, 2, 2]  # Mixed LoRA usage
-target_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+# Create fake input - all samples use base model (lora_index=0)
+# This tests that the model works correctly when LoRAs exist but aren't used
+print("\nCreating fake input with NO LoRA usage (all base model)...")
+input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+lora_indices = [0] * batch_size  # All samples use base model
+target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
 print(f"Input shape: {input_ids.shape}")
-print(f"LoRA indices: {lora_indices}")
+print(f"LoRA indices: {lora_indices} (all base model)")
 
-# Test forward pass with automatic grouping
-print("\nRunning forward passes with automatic LoRA grouping...")
+# Test forward pass with base model only
+print("\nRunning forward passes with base model only (no LoRA adapters used)...")
 for i in range(3):
     print(f"\nPass {i+1}:")
     
-    # Forward pass - let the model handle grouping
+    # Forward pass - all samples use base model
     logits = model(input_ids, lora_indices=lora_indices)
     print(f"  Output shape: {logits.shape}")
     
@@ -68,8 +73,21 @@ for i in range(3):
     loss.backward()
     print(f"  Backward pass completed")
     
+    # Verify that LoRA parameters received no gradients (since they weren't used)
+    lora_grads_exist = False
+    for name, param in model.named_parameters():
+        if 'lora' in name.lower() and param.grad is not None:
+            if param.grad.abs().sum() > 0:
+                lora_grads_exist = True
+                break
+    
+    if lora_grads_exist:
+        print(f"  ⚠ WARNING: LoRA parameters have gradients (unexpected!)")
+    else:
+        print(f"  ✓ LoRA parameters have no gradients (as expected)")
+    
     # Clear gradients
     model.zero_grad()
 
 print("\n✓ All tests passed!")
-print("✓ Model successfully grouped samples by LoRA index and processed them!")
+print("✓ Model successfully processed batch using only base model (no LoRA adapters)!")

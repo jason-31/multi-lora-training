@@ -22,6 +22,11 @@ model = Transformer(
     theta=10000.0
 )
 
+# Move the model to CUDA device if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+print(f"Using device: {device}")
+
 print(f"Model parameters before LoRA: {sum(p.numel() for p in model.parameters()):,}")
 
 # Add two LoRA adapters
@@ -37,9 +42,9 @@ print(f"Number of LoRA modules: {len(model.lora_modules) -1}")
 # Create fake input with mixed LoRA indices
 # Batch of 8: 2 base model, 3 LoRA 1, 3 LoRA 2
 print("\nCreating fake input with mixed LoRA indices...")
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 lora_indices = [0, 0, 1, 1, 1, 2, 2, 2]  # Mixed LoRA usage
-target_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
 print(f"Input shape: {input_ids.shape}")
 print(f"LoRA indices: {lora_indices}")

@@ -27,6 +27,11 @@ model = Transformer(
     theta=theta
 )
 
+# Move the model to CUDA device if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = model.to(device)
+print(f"Using device: {device}")
+
 print(f"Model parameters before LoRA: {sum(p.numel() for p in model.parameters()):,}")
 
 # Add two LoRA adapters
@@ -49,8 +54,8 @@ lora1_samples = 3
 lora2_samples = 3
 
 # Create input already grouped and ordered
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
-target_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
 # Define lora_start_indices for pre-grouped batch
 # Format: [start_of_base, start_of_lora1, start_of_lora2]
