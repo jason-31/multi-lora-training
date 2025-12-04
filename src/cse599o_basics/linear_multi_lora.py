@@ -38,6 +38,7 @@ class MultiLoraLinear(torch.nn.Module):
         Returns:
             Output tensor of shape (..., out_features)        
         """
+        # ipdb.set_trace()
         dims = len(x.shape)
         patern = ' '.join([f'dim_{i}' for i in range(dims - 1)])
         x_column = rearrange(x, '... d_in -> d_in (...)')
@@ -53,18 +54,21 @@ class MultiLoraLinear(torch.nn.Module):
         for i in range(len(lora_start_indices)):
             start_idx = lora_start_indices[i]
             end_idx = lora_start_indices[i + 1] if i + 1 < len(lora_start_indices) else x.shape[0]
-            lora_key = str(i + 1)  # lora indices start from 1
-            if lora_key in self.loras:
-                lora_grouped_inputs[lora_key] = x[start_idx:end_idx]
+            lora_key = str(i)  # lora indices start from 1
+            if lora_key in self.loras or i == 0:  # include base model
+                if start_idx != end_idx:
+                    lora_grouped_inputs[lora_key] = x[start_idx:end_idx]
 
         # pass each group to their corresponding LoRA adapter parallely
         # TODO: optimize this part later with pytorch stream
         for lora_key, group_input in lora_grouped_inputs.items():
+            if lora_key == '0':
+                continue
             lora_adapter = self.loras[lora_key]
             lora_output = lora_adapter(group_input)
-            start_idx = lora_start_indices[int(lora_key) - 1]
-            end_idx = lora_start_indices[int(lora_key)] if int(lora_key) < len(lora_start_indices) else x.shape[0]
-            y[start_idx:end_idx] += lora_output
+            start_idx = lora_start_indices[int(lora_key)]
+            end_idx = lora_start_indices[int(lora_key) + 1] if int(lora_key) + 1 < len(lora_start_indices) else x.shape[0]
+            y[start_idx:end_idx] = y[start_idx:end_idx] + lora_output
 
         return y
     

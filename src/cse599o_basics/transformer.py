@@ -228,3 +228,53 @@ class Transformer(torch.nn.Module):
         self.lora_modules.append(lora_index)
         
         print(f"Added LoRA adapters with rank {rank} to {len(matched_modules)} modules as LoRA index {lora_index}.")
+    
+    def set_base_model_grad(self, requires_grad: bool):
+        """
+        Set requires_grad for all base model parameters (excluding LoRA parameters).
+        
+        Args:
+            requires_grad: Whether to enable gradients for base model parameters.
+        """
+        for name, param in self.named_parameters():
+            # Skip LoRA parameters (they contain 'loras' in their name)
+            if 'loras' not in name:
+                param.requires_grad = requires_grad
+        
+        print(f"Set base model requires_grad={requires_grad}")
+    
+    def set_lora_grad(self, lora_index: int, requires_grad: bool):
+        """
+        Set requires_grad for a specific LoRA adapter's parameters.
+        
+        Args:
+            lora_index: Index of the LoRA adapter (1, 2, 3, ...).
+            requires_grad: Whether to enable gradients for this LoRA's parameters.
+        """
+        if lora_index == 0:
+            raise ValueError("LoRA index 0 is reserved for base model. Use set_base_model_grad() instead.")
+        
+        if lora_index not in self.lora_modules:
+            raise ValueError(f"LoRA index {lora_index} does not exist.")
+        
+        lora_key = str(lora_index)
+        for name, param in self.named_parameters():
+            # Check if this parameter belongs to the specified LoRA
+            if f'loras.{lora_key}.' in name:
+                param.requires_grad = requires_grad
+        
+        print(f"Set LoRA {lora_index} requires_grad={requires_grad}")
+    
+    def set_all_loras_grad(self, requires_grad: bool):
+        """
+        Set requires_grad for all LoRA adapter parameters.
+        
+        Args:
+            requires_grad: Whether to enable gradients for all LoRA parameters.
+        """
+        for name, param in self.named_parameters():
+            # Only affect LoRA parameters
+            if 'loras.' in name:
+                param.requires_grad = requires_grad
+        
+        print(f"Set all LoRA adapters requires_grad={requires_grad}")

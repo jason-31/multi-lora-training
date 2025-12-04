@@ -1,15 +1,20 @@
 import torch
 from cse599o_basics.transformer import Transformer
+from test_utils import load_test_config
 
-# Test configuration
-batch_size = 8
-seq_len = 16
-d_model = 128
-num_heads = 4
-d_ff = 512
-vocab_size = 1000
-context_length = 64
-num_layers = 2
+# Load test configuration
+config = load_test_config()
+batch_size = config["batch_size"]
+seq_len = config["seq_len"]
+d_model = config["d_model"]
+num_heads = config["num_heads"]
+d_ff = config["d_ff"]
+vocab_size = config["vocab_size"]
+context_length = config["context_length"]
+num_layers = config["num_layers"]
+theta = config["theta"]
+lora_rank = config["lora_rank"]
+lora_alpha = config["lora_alpha"]
 
 print("Initializing transformer...")
 model = Transformer(
@@ -19,22 +24,17 @@ model = Transformer(
     vocab_size=vocab_size,
     context_length=context_length,
     num_layers=num_layers,
-    theta=10000.0
+    theta=theta
 )
-
-# Move the model to CUDA device if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = model.to(device)
-print(f"Using device: {device}")
 
 print(f"Model parameters before LoRA: {sum(p.numel() for p in model.parameters()):,}")
 
 # Add two LoRA adapters
 print("\nAdding LoRA adapter 1...")
-model.add_lora(rank=8, lora_alpha=16)
+model.add_lora(rank=lora_rank, lora_alpha=lora_alpha)
 
 print("\nAdding LoRA adapter 2...")
-model.add_lora(rank=8, lora_alpha=16)
+model.add_lora(rank=lora_rank, lora_alpha=lora_alpha)
 
 print(f"\nModel parameters after LoRA: {sum(p.numel() for p in model.parameters()):,}")
 print(f"Number of LoRA modules: {len(model.lora_modules) -1}")
@@ -47,11 +47,11 @@ trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Trainable parameters: {trainable_params:,}")
 
 # Create fake input with mixed LoRA indices
-# Batch of 8: 2 base model, 3 LoRA 1, 3 LoRA 2
-print("\nCreating fake input with mixed LoRA indices...")
-input_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
-lora_indices = [0, 0, 1, 1, 1, 2, 2, 2]  # Mixed LoRA usage
-target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
+# Batch of 8: All base model (no LoRA usage)
+print("\nCreating fake input without using LoRA (all base model)...")
+input_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
+lora_indices = None
+target_ids = torch.randint(0, vocab_size, (batch_size, seq_len))
 
 print(f"Input shape: {input_ids.shape}")
 print(f"LoRA indices: {lora_indices}")
@@ -71,7 +71,7 @@ for name, param in model.named_parameters():
         initial_lora_weights[name] = param.data.clone()
 
 # Test forward pass with automatic grouping
-print("\nRunning forward passes with automatic LoRA grouping...")
+print("\nRunning forward passes without using LoRA (automatic grouping)...")
 for i in range(3):
     print(f"\nPass {i+1}:")
     
@@ -106,19 +106,19 @@ if weights_unchanged:
 else:
     raise AssertionError("Base model weights changed during training!")
 
-# Verify LoRA weights HAVE changed
-print("\nVerifying LoRA weights have changed...")
-lora_weights_changed = False
+# Verify LoRA weights have NOT changed (since they weren't used)
+print("\nVerifying LoRA weights have NOT changed (since they weren't used)...")
+lora_weights_unchanged = True
 for name, param in model.named_parameters():
     if 'loras' in name:  # LoRA parameters only
         if not torch.allclose(param.data, initial_lora_weights[name]):
-            lora_weights_changed = True
-            break
+            print(f"  ✗ LoRA weight changed: {name}")
+            lora_weights_unchanged = False
 
-if lora_weights_changed:
-    print("  ✓ LoRA weights changed (as expected)!")
+if lora_weights_unchanged:
+    print("  ✓ All LoRA weights unchanged (as expected)!")
 else:
-    raise AssertionError("LoRA weights did not change during training!")
+    raise AssertionError("LoRA weights changed even though they weren't used!")
 
 print("\n✓ All tests passed!")
-print("✓ Model successfully grouped samples by LoRA index and processed them!")
+print("✓ Model successfully processed batch using only base model (no LoRA adapters used)!")

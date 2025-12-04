@@ -44,6 +44,13 @@ model.add_lora(rank=lora_rank, lora_alpha=lora_alpha)
 print(f"\nModel parameters after LoRA: {sum(p.numel() for p in model.parameters()):,}")
 print(f"Number of LoRA adapters: {len(model.lora_modules) - 1}")
 
+# Freeze base model and enable LoRA gradients
+print("\nFreezing base model and enabling LoRA gradients...")
+model.set_base_model_grad(False)
+model.set_all_loras_grad(True)
+trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print(f"Trainable parameters: {trainable_params:,}")
+
 # Create fake input - all samples use base model (lora_index=0)
 # This tests that the model works correctly when LoRAs exist but aren't used
 print("\nCreating fake input with NO LoRA usage (all base model)...")
@@ -53,6 +60,20 @@ target_ids = torch.randint(0, vocab_size, (batch_size, seq_len), device=device)
 
 print(f"Input shape: {input_ids.shape}")
 print(f"LoRA indices: {lora_indices} (all base model)")
+
+# Store initial base model weights for verification
+print("\nStoring initial base model weights for verification...")
+initial_weights = {}
+for name, param in model.named_parameters():
+    if 'loras' not in name:  # Base model parameters only
+        initial_weights[name] = param.data.clone()
+
+# Store initial LoRA weights for verification
+print("Storing initial LoRA weights for verification...")
+initial_lora_weights = {}
+for name, param in model.named_parameters():
+    if 'loras' in name:  # LoRA parameters only
+        initial_lora_weights[name] = param.data.clone()
 
 # Test forward pass with base model only
 print("\nRunning forward passes with base model only (no LoRA adapters used)...")
@@ -88,6 +109,34 @@ for i in range(3):
     
     # Clear gradients
     model.zero_grad()
+
+# Verify base model weights haven't changed
+print("\nVerifying base model weights haven't changed...")
+weights_unchanged = True
+for name, param in model.named_parameters():
+    if 'loras' not in name:  # Base model parameters only
+        if not torch.allclose(param.data, initial_weights[name]):
+            print(f"  ✗ Weight changed: {name}")
+            weights_unchanged = False
+
+if weights_unchanged:
+    print("  ✓ All base model weights unchanged!")
+else:
+    raise AssertionError("Base model weights changed during training!")
+
+# Verify LoRA weights have NOT changed (since they weren't used)
+print("\nVerifying LoRA weights have NOT changed (since they weren't used)...")
+lora_weights_unchanged = True
+for name, param in model.named_parameters():
+    if 'loras' in name:  # LoRA parameters only
+        if not torch.allclose(param.data, initial_lora_weights[name]):
+            print(f"  ✗ LoRA weight changed: {name}")
+            lora_weights_unchanged = False
+
+if lora_weights_unchanged:
+    print("  ✓ All LoRA weights unchanged (as expected)!")
+else:
+    raise AssertionError("LoRA weights changed even though they weren't used!")
 
 print("\n✓ All tests passed!")
 print("✓ Model successfully processed batch using only base model (no LoRA adapters)!")
